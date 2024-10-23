@@ -13,16 +13,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Clone the Gitleaks repository
+      - name: Clone Gitleaks repository
+        run: |
+          git clone -b v8.21.1 --single-branch https://github.com/gitleaks/gitleaks.git
+          cd gitleaks
+
+
       # Install Go
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23.2' # Specify Go version to install
 
-      # Clone the Gitleaks repository
+      # Build Gitleaks
       - name: Clone Gitleaks repository
         run: |
-          git clone -b v8.21.1 --single-branch https://github.com/gitleaks/gitleaks.git
           cd gitleaks
           make build
 
