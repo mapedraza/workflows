@@ -9,33 +9,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Checkout the repository
-      - name: Checkout code
+      # Checkout the repository that triggered the workflow
+      - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Clone the Gitleaks repository
+      # Checkout the Gitleaks source code
       - name: Checkout Gitleaks
         uses: actions/checkout@v4
         with:
           repository: gitleaks/gitleaks
           ref: v8.21.1
+          path: gitleaks-source  # Check out Gitleaks to a specific directory
 
       # Install Go
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.2' # Specify Go version to install
+          go-version: '1.23.2'  # Specify Go version to install
 
       # Build Gitleaks
       - name: Build Gitleaks
         run: |
-          cd gitleaks
-          make build
+          make -C gitleaks-source build  # Build Gitleaks from the gitleaks-source directory
 
       # Run Gitleaks scan on the repository
       - name: Run Gitleaks
         run: |
-          ./gitleaks/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
+          gitleaks-source/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
+
       # Upload the scan report as an artifact (optional)
       - name: Upload Gitleaks report
         uses: actions/upload-artifact@v4
@@ -44,14 +45,6 @@ jobs:
           path: results.sarif
 
       # Fail the build if Gitleaks detects any secrets
-      # - name: Check for leaks
-      #   run: |
-      #     if grep -q "leaks detected" results.sarif; then
-      #       echo "Secrets detected!"
-      #       exit 1
-      #     else
-      #       echo "No secrets detected."
-      #     fi
       - name: Check for leaks
         run: |
           # Check if there are any "results" in the SARIF JSON file
