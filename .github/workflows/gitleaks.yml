@@ -2,10 +2,8 @@ name: Gitleaks Scan
 
 # Run the workflow on pull requests targeting the 'main' branch
 on:
-  pull_request:
-    branches:
-      - main
-
+  workflow_call:
+    
 jobs:
   gitleaks-scan:
     runs-on: ubuntu-latest
