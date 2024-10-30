@@ -8,52 +8,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Cache Go modules to speed up installation
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       # Checkout the repository that triggered the workflow
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Checkout the Gitleaks source code
+      # Cache the Gitleaks binary
+      - name: Cache Gitleaks Binary
+        id: gitleaks-cache
+        uses: actions/cache@v4
+        with:
+          # Path to the Gitleaks binary
+          path: .gitleaks/gitleaks
+          # Cache key based on Gitleaks version
+          key: gitleaks-v8.21.1
+
+      # Only download and build Gitleaks if the cache is missed
       - name: Checkout Gitleaks
+        if: steps.gitleaks-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
           repository: gitleaks/gitleaks
           ref: v8.21.1
-          path: gitleaks-source
+          path: gitleaks-source  # Check out Gitleaks to a specific directory
 
-      # Cache the Gitleaks build to avoid recompilation
-      - name: Cache Gitleaks build
-        uses: actions/cache@v4
-        with:
-          path: gitleaks-source/bin
-          key: ${{ runner.os }}-gitleaks-build-${{ hashFiles('gitleaks-source/Makefile') }}
-          restore-keys: |
-            ${{ runner.os }}-gitleaks-build-
-
-      # Install Go
+      # Set up Go only if Gitleaks needs to be built
       - name: Set up Go
+        if: steps.gitleaks-cache.outputs.cache-hit != 'true'
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.2'
+          go-version: '1.23.2'  # Specify Go version to install
 
-      # Build Gitleaks if not cached
+      # Build Gitleaks only if the cache is missed
       - name: Build Gitleaks
-        if: steps.cache.outputs.cache-hit != 'true'
+        if: steps.gitleaks-cache.outputs.cache-hit != 'true'
         run: |
-          make -C gitleaks-source build
+          make -C gitleaks-source build  # Build Gitleaks from the gitleaks-source directory
+          mkdir -p .gitleaks  # Create the directory for caching
+          mv gitleaks-source/gitleaks .gitleaks/gitleaks  # Move the binary to the cache path
 
       # Run Gitleaks scan on the repository
       - name: Run Gitleaks
         run: |
-          gitleaks-source/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
+          .gitleaks/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
 
       # Upload the scan report as an artifact
       - name: Upload Gitleaks report
@@ -65,7 +61,9 @@ jobs:
       # Fail the build if Gitleaks detects any secrets
       - name: Check for leaks
         run: |
+          # Check if there are any "results" in the SARIF JSON file
           leaks=$(jq '.runs[0].results | length' results.sarif)
+
           if [ "$leaks" -gt 0 ]; then
             echo "Secrets detected in the PR!"
             jq '.runs[0].results[] | {message: .message.text, file: .locations[0].physicalLocation.artifactLocation.uri, line: .locations[0].physicalLocation.region.startLine}' results.sarif
