@@ -1,6 +1,5 @@
 name: Gitleaks Scan
 
-# Run the workflow on pull requests targeting the 'main' branch
 on:
   workflow_call:
 
@@ -9,6 +8,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Cache Go modules to speed up installation
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       # Checkout the repository that triggered the workflow
       - name: Checkout repository code
         uses: actions/checkout@v4
@@ -19,25 +27,35 @@ jobs:
         with:
           repository: gitleaks/gitleaks
           ref: v8.21.1
-          path: gitleaks-source  # Check out Gitleaks to a specific directory
+          path: gitleaks-source
+
+      # Cache the Gitleaks build to avoid recompilation
+      - name: Cache Gitleaks build
+        uses: actions/cache@v4
+        with:
+          path: gitleaks-source/bin
+          key: ${{ runner.os }}-gitleaks-build-${{ hashFiles('gitleaks-source/Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-gitleaks-build-
 
       # Install Go
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.2'  # Specify Go version to install
+          go-version: '1.23.2'
 
-      # Build Gitleaks
+      # Build Gitleaks if not cached
       - name: Build Gitleaks
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          make -C gitleaks-source build  # Build Gitleaks from the gitleaks-source directory
+          make -C gitleaks-source build
 
       # Run Gitleaks scan on the repository
       - name: Run Gitleaks
         run: |
           gitleaks-source/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
 
-      # Upload the scan report as an artifact (optional)
+      # Upload the scan report as an artifact
       - name: Upload Gitleaks report
         uses: actions/upload-artifact@v4
         with:
@@ -47,9 +65,7 @@ jobs:
       # Fail the build if Gitleaks detects any secrets
       - name: Check for leaks
         run: |
-          # Check if there are any "results" in the SARIF JSON file
           leaks=$(jq '.runs[0].results | length' results.sarif)
-
           if [ "$leaks" -gt 0 ]; then
             echo "Secrets detected in the PR!"
             jq '.runs[0].results[] | {message: .message.text, file: .locations[0].physicalLocation.artifactLocation.uri, line: .locations[0].physicalLocation.region.startLine}' results.sarif
