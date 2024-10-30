@@ -19,7 +19,8 @@ jobs:
         with:
           path: .gitleaks  # Cache directory
           key: gitleaks-v8.21.1
-
+          save-always: true
+          
       # Only download and build Gitleaks if the cache is missed
       - name: Checkout Gitleaks
         if: steps.gitleaks-cache.outputs.cache-hit != 'true'
