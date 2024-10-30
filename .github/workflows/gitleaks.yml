@@ -12,14 +12,12 @@ jobs:
       - name: Checkout repository code
         uses: actions/checkout@v4
 
-      # Cache the Gitleaks binary
-      - name: Cache Gitleaks Binary
+      # Restore the Gitleaks binary cache
+      - name: Restore Gitleaks Binary Cache
         id: gitleaks-cache
         uses: actions/cache@v4
         with:
-          # Path to the Gitleaks binary
-          path: .gitleaks/gitleaks
-          # Cache key based on Gitleaks version
+          path: .gitleaks  # Cache directory
           key: gitleaks-v8.21.1
 
       # Only download and build Gitleaks if the cache is missed
@@ -38,7 +36,7 @@ jobs:
         with:
           go-version: '1.23.2'  # Specify Go version to install
 
-      # Build Gitleaks only if the cache is missed
+      # Build Gitleaks and ensure the binary is in the cache path
       - name: Build Gitleaks
         if: steps.gitleaks-cache.outputs.cache-hit != 'true'
         run: |
@@ -49,7 +47,7 @@ jobs:
       # Run Gitleaks scan on the repository
       - name: Run Gitleaks
         run: |
-          .gitleaks/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
+          ./.gitleaks/gitleaks detect --source . --redact -v --report-format=sarif --report-path=results.sarif --log-level=debug --log-opts=--no-merges
 
       # Upload the scan report as an artifact
       - name: Upload Gitleaks report
@@ -71,3 +69,12 @@ jobs:
           else
             echo "No secrets detected in PR."
           fi
+
+      # Save the cache even if the job fails
+      - name: Save Gitleaks Binary Cache
+        if: always()
+        uses: actions/cache@v4
+        with:
+          path: .gitleaks
+          key: gitleaks-v8.21.1
+          upload-chunk-size: 50000000  # Optional: Adjust if needed
